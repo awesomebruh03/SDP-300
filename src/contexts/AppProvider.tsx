@@ -1,7 +1,9 @@
 
 "use client";
-import type { User, Project, Task, TaskStatus, ProjectFormData, TaskFormData } from '@/lib/types';
+import type { User, Project, Task, TaskStatus, ProjectFormData, TaskFormData, Milestone, MilestoneFormData } from '@/lib/types';
 import { LOCAL_STORAGE_USER_KEY, LOCAL_STORAGE_PROJECTS_KEY, LOCAL_STORAGE_TASKS_KEY } from '@/lib/constants';
+// Add this constant for milestones
+const LOCAL_STORAGE_MILESTONES_KEY = "taskTicker_milestones";
 import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { v4 as uuidv4 } from 'uuid'; // Needs: npm install uuid && npm install @types/uuid
 
@@ -30,6 +32,14 @@ export interface AppContextType {
   deleteTask: (taskId: string) => void; // Soft delete
   getTaskById: (taskId: string) => Task | undefined;
   moveTask: (taskId: string, newStatus: TaskStatus, newOrder: number, targetProjectId?: string) => void;
+  
+  // Milestones
+  milestones: Milestone[];
+  getMilestonesByProjectId: (projectId: string) => Milestone[];
+  getMilestoneById: (milestoneId: string) => Milestone | undefined;
+  addMilestone: (milestoneData: MilestoneFormData) => Milestone;
+  updateMilestone: (milestoneId: string, milestoneData: Partial<MilestoneFormData>) => Milestone | undefined;
+  deleteMilestone: (milestoneId: string) => void;
 }
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -52,6 +62,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [activeProjectId, setActiveProjectIdState] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -61,6 +72,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setProjects(storedProjects);
     const storedTasks = getFromLocalStorage<Task[]>(LOCAL_STORAGE_TASKS_KEY, []);
     setTasks(storedTasks);
+    const storedMilestones = getFromLocalStorage<Milestone[]>(LOCAL_STORAGE_MILESTONES_KEY, []);
+    setMilestones(storedMilestones);
 
     if (storedProjects.length > 0 && !activeProjectId) {
       setActiveProjectIdState(storedProjects.find(p => !p.isDeleted)?.id || null);
@@ -89,6 +102,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!isLoaded) return;
     setToLocalStorage(LOCAL_STORAGE_TASKS_KEY, tasks);
   }, [tasks, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    setToLocalStorage(LOCAL_STORAGE_MILESTONES_KEY, milestones);
+  }, [milestones, isLoaded]);
 
   const login = (email: string) => {
     const user: User = { id: uuidv4(), email };
@@ -193,6 +211,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const getTaskById = (taskId: string) => tasks.find(t => t.id === taskId && !t.isDeleted);
 
+  // Milestone CRUD operations
+  const getMilestonesByProjectId = (projectId: string) => 
+    milestones.filter(m => m.projectId === projectId && !m.isDeleted).sort((a, b) => a.order - b.order);
+
+  const getMilestoneById = (milestoneId: string) => 
+    milestones.find(m => m.id === milestoneId && !m.isDeleted);
+
+  const addMilestone = (milestoneData: MilestoneFormData): Milestone => {
+    const projectMilestones = getMilestonesByProjectId(milestoneData.projectId);
+    const order = projectMilestones.length > 0 ? Math.max(...projectMilestones.map(m => m.order)) + 1 : 0;
+    const newMilestone: Milestone = {
+      ...milestoneData,
+      id: uuidv4(),
+      order,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isDeleted: false,
+    };
+    setMilestones(prev => [...prev, newMilestone]);
+    return newMilestone;
+  };
+
+  const updateMilestone = (milestoneId: string, milestoneData: Partial<MilestoneFormData>): Milestone | undefined => {
+    let updatedMilestone: Milestone | undefined;
+    setMilestones(prev => prev.map(m => {
+      if (m.id === milestoneId) {
+        updatedMilestone = { ...m, ...milestoneData, updatedAt: new Date().toISOString() };
+        return updatedMilestone;
+      }
+      return m;
+    }));
+    return updatedMilestone;
+  };
+
+  const deleteMilestone = (milestoneId: string): void => {
+    setMilestones(prev => prev.map(m => 
+      m.id === milestoneId ? { ...m, isDeleted: true, updatedAt: new Date().toISOString() } : m
+    ));
+  };
+
   const moveTask = (taskId: string, newStatus: TaskStatus, newOrder: number, targetProjectId?: string) => {
     setTasks(prevTasks => {
       const taskToMove = prevTasks.find(t => t.id === taskId);
@@ -260,7 +318,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     <AppContext.Provider value={{
       currentUser, login, logout, isAuthenticated,
       projects, activeProjectId, setActiveProjectId, addProject, updateProject, deleteProject, getProjectById,
-      tasks, getTasksByProjectId, getTasksByProjectIdAndStatus, addTask, updateTask, deleteTask, getTaskById, moveTask
+      tasks, getTasksByProjectId, getTasksByProjectIdAndStatus, addTask, updateTask, deleteTask, getTaskById, moveTask,
+      milestones, getMilestonesByProjectId, getMilestoneById, addMilestone, updateMilestone, deleteMilestone
     }}>
       {children}
     </AppContext.Provider>

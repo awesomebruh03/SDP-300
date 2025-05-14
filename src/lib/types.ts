@@ -8,6 +8,20 @@ export interface User {
   // password will not be stored, this is a mock system
 }
 
+/**
+ * Represents a milestone or chunk within a project.
+ */
+export interface Milestone {
+  id: string;
+  name: string;
+  description?: string;
+  projectId: string;
+  order: number; // Order within a project
+  createdAt: string; // ISO
+  updatedAt: string; // ISO
+  isDeleted?: boolean;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -26,7 +40,7 @@ export interface Task {
   priority: Priority;
   status: TaskStatus;
   projectId: string;
-  // milestoneId?: string; // Optional milestone tracking
+  milestoneId?: string; // Optional milestone tracking
   timeSpent?: number; // in minutes
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
@@ -37,3 +51,4 @@ export interface Task {
 // For forms, partial types are often useful
 export type ProjectFormData = Omit<Project, "id" | "ownerId" | "createdAt" | "updatedAt" | "isDeleted">;
 export type TaskFormData = Omit<Task, "id" | "createdAt" | "updatedAt" | "isDeleted" | "order">;
+export type MilestoneFormData = Omit<Milestone, "id" | "createdAt" | "updatedAt" | "isDeleted" | "order">;
