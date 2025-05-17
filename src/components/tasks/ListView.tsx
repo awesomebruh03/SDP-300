@@ -11,9 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Edit3, Trash2, Plus } from 'lucide-react';
 import { TaskFormDialog } from './TaskFormDialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { MilestoneFormDialog } from '@/components/projects/MilestoneFormDialog';
 
-export function ListView() {
+export function ListView({ setIsTaskFormOpen: setParentTaskFormOpen }: { setIsTaskFormOpen: (isOpen: boolean) => void }) {
+  // Use the passed down setIsTaskFormOpen prop
+  const setIsTaskFormOpenState = setParentTaskFormOpen;
   const { 
     activeProjectId, 
     getTasksByProjectId, 
@@ -22,12 +23,10 @@ export function ListView() {
     getMilestonesByProjectId 
   } = useApp();
   const [taskToEdit, setTaskToEdit] = React.useState<Task | null>(null);
-  const [isTaskFormOpen, setIsTaskFormOpen] = React.useState(false);
+  // isTaskFormOpen state is now managed by the parent component
+  // const [isTaskFormOpen, setIsTaskFormOpen] = React.useState(false);
   const [taskToDelete, setTaskToDelete] = React.useState<Task | null>(null);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = React.useState(false);
-  
-  // For milestone creation dialog
-  const [milestoneDialogOpen, setMilestoneDialogOpen] = React.useState(false);
 
   const activeProject = projects.find(p => p.id === activeProjectId);
 
@@ -58,7 +57,7 @@ export function ListView() {
 
   const handleEditTask = (task: Task) => {
     setTaskToEdit(task);
-    setIsTaskFormOpen(true);
+    setIsTaskFormOpenState(true);
   };
 
   const handleDeleteTask = (task: Task) => {
@@ -151,7 +150,9 @@ export function ListView() {
 
       {taskToEdit && activeProjectId && (
         <TaskFormDialog
-          isOpen={isTaskFormOpen}
+          // Pass the state from the parent if the parent manages it
+          // For the edit dialog within ListView, we manage its state locally
+          isOpen={!!taskToEdit} // Open dialog if taskToEdit is not null
           onOpenChange={(isOpen) => {
             setIsTaskFormOpen(isOpen);
             if (!isOpen) setTaskToEdit(null);
@@ -175,18 +176,8 @@ export function ListView() {
         variant="default"
         size="lg"
         className="fixed bottom-8 right-8 rounded-full shadow-lg z-50 w-16 h-16 p-0 text-3xl flex items-center justify-center"
-        title="Create Milestone"
-        onClick={() => setMilestoneDialogOpen(true)}
-        aria-label="Create Milestone"
-      >
-        <Plus className="w-8 h-8" />
-      </Button>
-
-      <MilestoneFormDialog
-        isOpen={milestoneDialogOpen}
-        onOpenChange={setMilestoneDialogOpen}
-        projectId={activeProjectId}
-        projects={projects}
+        title="Create Task"
+        onClick={() => setIsTaskFormOpenState(true)} // Use the prop to open the parent's dialog
       />
     </div>
   );
