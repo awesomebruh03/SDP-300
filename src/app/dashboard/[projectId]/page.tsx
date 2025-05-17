@@ -1,7 +1,7 @@
 // src/app/dashboard/[projectId]/page.tsx
 'use client';
 
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, use } from 'react'; // Import 'use'
 import { useApp } from '@/hooks/useApp';
 import { notFound } from 'next/navigation';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
@@ -36,8 +36,9 @@ interface ProjectDashboardPageProps {
 // }
 
 
+import { PlusCircle } from 'lucide-react'; // Import PlusCircle
 const ProjectDashboardPage: React.FC<ProjectDashboardPageProps> = ({ params }) => {
-  const { projectId } = params;
+  const { projectId } = use(Promise.resolve(params)); // Unwrap params with use()
   // Assuming useApp provides arrays of Project and Task objects
   const { projects, tasks, setActiveProjectId } = useApp();
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false); // State for TaskFormDialog
@@ -75,7 +76,7 @@ const ProjectDashboardPage: React.FC<ProjectDashboardPageProps> = ({ params }) =
     // This might be necessary depending on how you want the global activeProjectId
     // to behave when navigating away from a project-specific dashboard.
     // return () => setActiveProjectId(null);
-  }, [tasks, projectId]);
+  }, [projectId, setActiveProjectId]); // Added setActiveProjectId to dependency array
 
   // You might want to add loading states if fetching data is asynchronous
   // For now, assuming data is immediately available from context after initial load
@@ -83,13 +84,8 @@ const ProjectDashboardPage: React.FC<ProjectDashboardPageProps> = ({ params }) =
   return (
  <div className="flex h-screen flex-col">
  {/* Header for the project dashboard */}
- <header className="p-4 border-b flex justify-between items-center">
+ <header className="p-4 border-b flex justify-between items-center"> {/* Added flex justify-between items-center back */}
  <h1 className="text-2xl font-bold">{project.name}</h1>
- {/* Add Task Button */}
- {/* Assuming you have a PlusCircle icon imported */}
- {/* <Button variant="default" size="sm" onClick={() => setIsTaskFormOpen(true)}>
- <PlusCircle className="mr-2 h-4 w-4" /> Add Task
- </Button> */}
  </header>
 
  <main className="flex-grow overflow-hidden bg-background">
@@ -106,17 +102,33 @@ const ProjectDashboardPage: React.FC<ProjectDashboardPageProps> = ({ params }) =
 
  {/* Content for each tab */}
  <TabsContent value="list" className="flex-grow overflow-y-auto">
- <ListView tasks={projectTasks} setIsTaskFormOpen={setIsTaskFormOpen} projectId={projectId} />
+ {/* Pass setIsTaskFormOpen and projectId to ListView if needed for task creation from list view */}
+ <ListView tasks={projectTasks} setIsTaskFormOpen={setIsTaskFormOpen} />
  </TabsContent>
  <TabsContent value="kanban" className="flex-grow overflow-hidden">
- <KanbanBoard tasks={projectTasks} setIsTaskFormOpen={setIsTaskFormOpen} />
+ {/* Pass setIsTaskFormOpen and projectId to KanbanBoard */}
+ <KanbanBoard tasks={projectTasks} setIsTaskFormOpen={setIsTaskFormOpen} projectId={projectId} />
  </TabsContent>
  <TabsContent value="graph" className="flex-grow">
- <GraphView tasks={projectTasks} setIsTaskFormOpen={setIsTaskFormOpen} />
+ {/* Pass setIsTaskFormOpen and projectId to GraphView if needed */}
+ <GraphView tasks={projectTasks} />
  </TabsContent>
  </Tabs>
  </main>
  {/* Task Form Dialog */}
+
+ {/* Floating Action Button for Add Task */}
+ <Button
+ variant="default"
+ size="lg"
+ className="fixed bottom-8 right-8 rounded-full shadow-lg z-50 w-16 h-16 p-0 text-3xl flex items-center justify-center"
+ title="Create Task"
+ onClick={() => setIsTaskFormOpen(true)}
+ aria-label="Create Task"
+ >
+ <PlusCircle className="w-8 h-8" /> {/* Assuming PlusCircle is imported */}
+ </Button>
+
  <TaskFormDialog isOpen={isTaskFormOpen} onOpenChange={setIsTaskFormOpen} projectId={projectId} />
  </div>
   );

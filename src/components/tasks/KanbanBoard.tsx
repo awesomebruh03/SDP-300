@@ -1,22 +1,31 @@
-
-"use client";
+// src/components/tasks/KanbanBoard.tsx
+'use client';
 import React from 'react';
 import { useApp } from '@/hooks/useApp';
 import { KanbanColumn } from './KanbanColumn';
 import { TASK_STATUSES } from '@/lib/constants';
-import type { TaskStatus } from '@/lib/types';
+import type { TaskStatus, Task } from '@/lib/types'; // Import Task type
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button'; // Import Button
+import { PlusCircle } from 'lucide-react'; // Import PlusCircle icon
 
 
-export function KanbanBoard() {
-  const { activeProjectId, getTasksByProjectIdAndStatus, moveTask } = useApp();
+interface KanbanBoardProps {
+  tasks: Task[]; // Accept tasks as a prop
+  setIsTaskFormOpen: (isOpen: boolean) => void; // Accept setIsTaskFormOpen prop
+  projectId: string; // Accept projectId prop
+}
+
+export function KanbanBoard({ tasks, setIsTaskFormOpen, projectId }: KanbanBoardProps) { // Destructure props
+  const { moveTask, getTasksByProjectIdAndStatus, activeProjectId } = useApp(); // Keep getTasksByProjectIdAndStatus if needed elsewhere in KanbanBoard logic
+
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, taskId: string) => {
     e.dataTransfer.setData('taskId', taskId);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>, status: TaskStatus) => {
-    e.preventDefault(); // Necessary to allow dropping
+    e.preventDefault();
     // Optionally, add visual feedback here
   };
 
@@ -25,18 +34,18 @@ export function KanbanBoard() {
     const taskId = e.dataTransfer.getData('taskId');
     if (!taskId) return;
 
-    const tasksInNewColumn = getTasksByProjectIdAndStatus(activeProjectId, newStatus);
-    
-    // Simple drop logic: append to the end of the column or determine position
-    // For more precise positioning, you'd need to analyze e.clientY relative to task cards
+    // Use the tasks prop for determining order within the current view
+    const tasksInNewColumn = tasks
+      .filter(task => task.status === newStatus)
+      .sort((a, b) => a.order - b.order);
+
     let newOrder = tasksInNewColumn.length;
 
-    // More advanced drop positioning (experimental)
-    const columnElement = e.currentTarget; // The column div
+    const columnElement = e.currentTarget;
     const dropY = e.clientY;
-    
+
     const cards = Array.from(columnElement.querySelectorAll('[id^="task-"]')) as HTMLElement[];
-    let targetIndex = cards.length; // Default to end
+    let targetIndex = cards.length;
 
     for (let i = 0; i < cards.length; i++) {
       const card = cards[i];
@@ -49,27 +58,21 @@ export function KanbanBoard() {
     }
     newOrder = targetIndex;
 
-
-    moveTask(taskId, newStatus, newOrder, activeProjectId || undefined);
+    // Pass the projectId from props when moving a task
+    moveTask(taskId, newStatus, newOrder, projectId);
   };
-  
-  if (!activeProjectId) {
-     return (
-      <div className="flex-grow flex items-center justify-center p-6">
-        <p className="text-xl text-muted-foreground">Please select or create a project to see tasks.</p>
-      </div>
-    );
-  }
+
 
   return (
-    <div className="flex-grow p-6 h-[calc(100vh-4rem-1.5rem)]"> {/* Adjust height based on header */}
+    <div className="flex-grow p-6 h-[calc(100vh-4rem-1.5rem)] relative">
       <ScrollArea className="h-full w-full whitespace-nowrap">
         <div className="flex gap-6 pb-4 h-full">
           {TASK_STATUSES.map((status) => (
             <KanbanColumn
               key={status}
               status={status}
-              tasks={getTasksByProjectIdAndStatus(activeProjectId, status)}
+              // Filter tasks prop by status for each column
+              tasks={tasks.filter(task => task.status === status).sort((a, b) => a.order - b.order)}
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
               onDrop={handleDrop}
