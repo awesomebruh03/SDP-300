@@ -1,4 +1,5 @@
 
+
 "use client";
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/hooks/useApp';
@@ -17,6 +18,13 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
+// Define mock users directly in this file for now
+const MOCK_USERS = [
+  { id: 'user-1', name: 'Alice Smith' },
+  { id: 'user-2', name: 'Bob Johnson' },
+  { id: 'user-3', name: 'Charlie Brown' },
+];
+
 interface TaskFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
@@ -25,7 +33,9 @@ interface TaskFormDialogProps {
   initialStatus?: Task['status'];
 }
 
+// Add assignedUserId to Task and TaskFormData types in '@/lib/types' if not already there
 export function TaskFormDialog({ isOpen, onOpenChange, taskToEdit, projectId, initialStatus }: TaskFormDialogProps) {
+  console.log('TaskFormDialog rendering, isOpen:', isOpen); // Add this line
   const { addTask, updateTask, projects, activeProjectId } = useApp();
   const { toast } = useToast();
 
@@ -36,6 +46,7 @@ export function TaskFormDialog({ isOpen, onOpenChange, taskToEdit, projectId, in
   const [status, setStatus] = useState<Task['status']>(initialStatus || 'todo');
   const [assignedProjectId, setAssignedProjectId] = useState<string>(projectId || activeProjectId || '');
   const [timeSpent, setTimeSpent] = useState<number>(0); // in minutes
+  const [assignedUserId, setAssignedUserId] = useState<string | undefined>(undefined); // New state for assigned user
 
   useEffect(() => {
     setAssignedProjectId(projectId || activeProjectId || '');
@@ -46,6 +57,7 @@ export function TaskFormDialog({ isOpen, onOpenChange, taskToEdit, projectId, in
       setPriority(taskToEdit.priority);
       setStatus(taskToEdit.status);
       setAssignedProjectId(taskToEdit.projectId);
+      setAssignedUserId(taskToEdit.assignedUserId); // Load assigned user if editing
       setTimeSpent(taskToEdit.timeSpent || 0);
     } else {
       setTitle('');
@@ -54,8 +66,9 @@ export function TaskFormDialog({ isOpen, onOpenChange, taskToEdit, projectId, in
       setPriority('medium');
       setStatus(initialStatus || 'todo');
       setTimeSpent(0);
+      setAssignedUserId(undefined); // Reset assigned user
     }
-  }, [taskToEdit, isOpen, projectId, activeProjectId, initialStatus]);
+  }, [taskToEdit, isOpen, projectId, activeProjectId, initialStatus]); // Added assignedUserId to dependency array implicitly via taskToEdit
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +89,7 @@ export function TaskFormDialog({ isOpen, onOpenChange, taskToEdit, projectId, in
       status,
       projectId: assignedProjectId,
       timeSpent,
+      assignedUserId, // Include assigned user in task data
     };
     
     try {
@@ -182,6 +196,26 @@ export function TaskFormDialog({ isOpen, onOpenChange, taskToEdit, projectId, in
                   <SelectContent>
                     {availableProjects.map(p => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Assigned User */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="assignedUser">Assigned User</Label>
+                <Select value={assignedUserId} onValueChange={(value: string) => setAssignedUserId(value === '' ? undefined : value)}>
+                  <SelectTrigger id="assignedUser">
+                    <SelectValue placeholder="Assign to user (Optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Option to unassign */}
+                    <SelectItem value="">Unassigned</SelectItem>
+                    {/* Mock users */}
+                    {MOCK_USERS.map(user => (
+                      <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

@@ -7,6 +7,14 @@
 - Project Organization: Organize tasks by projects. A project filter that shows tasks associated with the given project. Optional milestone categorization.
 - Secure Login: Basic login system with email and password, storing user data locally in browser storage, no dedicated database
 
+## Team Collaboration:
+
+- Team Creation: Users can create teams with a name.
+- Team Management UI: A collapsable right sidebar will be used to manage teams and members.
+- Project Assignment: Assign projects to a team.
+- Task Assignment: Assign tasks to individual team members within the assigned project's team.
+
+
 ## Style Guidelines:
 
 - Primary color: Calm blue (#4682B4) to convey professionalism and focus.

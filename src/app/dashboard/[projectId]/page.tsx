@@ -1,10 +1,11 @@
 // src/app/dashboard/[projectId]/page.tsx
 'use client';
-
-import React, { useMemo, useEffect, useState, use } from 'react'; // Import 'use'
+// Removed 'useState' and 'use' imports as they are no longer needed in this way
+import React, { useMemo, useEffect } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { notFound } from 'next/navigation';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
+import { useSidebar } from '@/context/SidebarContext';
 import { ListView } from '@/components/tasks/ListView';
 import { GraphView } from '@/components/tasks/GraphView';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -38,10 +39,12 @@ interface ProjectDashboardPageProps {
 
 import { PlusCircle } from 'lucide-react'; // Import PlusCircle
 const ProjectDashboardPage: React.FC<ProjectDashboardPageProps> = ({ params }) => {
-  const { projectId } = use(Promise.resolve(params)); // Unwrap params with use()
+  // Access projectId directly from params
+  const { projectId } = params;
   // Assuming useApp provides arrays of Project and Task objects
-  const { projects, tasks, setActiveProjectId } = useApp();
-  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false); // State for TaskFormDialog
+  const { projects, tasks, setActiveProjectId, createTask } = useApp(); // Assuming createTask is in useApp
+  // Get state and close function from context
+  const { isTaskFormOpen, closeTaskForm } = useSidebar(); // Get state and close function from context
 
   // Find the project with the matching ID
   const project = useMemo(() => {
@@ -81,58 +84,11 @@ const ProjectDashboardPage: React.FC<ProjectDashboardPageProps> = ({ params }) =
   // You might want to add loading states if fetching data is asynchronous
   // For now, assuming data is immediately available from context after initial load
 
+  // Move console.log inside the component function body
+  console.log('isTaskFormOpen:', isTaskFormOpen);
+  // Add console.log immediately after getting the value from the hook
+  console.log('isTaskFormOpen value from hook:', isTaskFormOpen);
+
   return (
- <div className="flex h-screen flex-col">
- {/* Header for the project dashboard */}
- <header className="p-4 border-b flex justify-between items-center"> {/* Added flex justify-between items-center back */}
- <h1 className="text-2xl font-bold">{project.name}</h1>
- </header>
-
- <main className="flex-grow overflow-hidden bg-background">
- {/* Tabs for switching between task views */}
- <Tabs defaultValue="kanban" className="h-full flex flex-col">
- <div className="p-4 border-b">
- {/* Ensure TabsList and Triggers match your UI component library */}
- <TabsList className="grid w-full grid-cols-3 max-w-md mx-auto">
- <TabsTrigger value="list">List View</TabsTrigger>
- <TabsTrigger value="kanban">Kanban</TabsTrigger>
- <TabsTrigger value="graph">Graph View</TabsTrigger>
- </TabsList>
- </div>
-
- {/* Content for each tab */}
- <TabsContent value="list" className="flex-grow overflow-y-auto">
- {/* Pass setIsTaskFormOpen and projectId to ListView if needed for task creation from list view */}
- <ListView tasks={projectTasks} setIsTaskFormOpen={setIsTaskFormOpen} />
- </TabsContent>
- <TabsContent value="kanban" className="flex-grow overflow-hidden">
- {/* Pass setIsTaskFormOpen and projectId to KanbanBoard */}
- <KanbanBoard tasks={projectTasks} setIsTaskFormOpen={setIsTaskFormOpen} projectId={projectId} />
- </TabsContent>
- <TabsContent value="graph" className="flex-grow">
- {/* Pass setIsTaskFormOpen and projectId to GraphView if needed */}
- <GraphView tasks={projectTasks} />
- </TabsContent>
- </Tabs>
- </main>
- {/* Task Form Dialog */}
-
- {/* Floating Action Button for Add Task */}
- <Button
- variant="default"
- size="lg"
- className="fixed bottom-8 right-8 rounded-full shadow-lg z-50 w-16 h-16 p-0 text-3xl flex items-center justify-center"
- title="Create Task"
- onClick={() => setIsTaskFormOpen(true)}
- aria-label="Create Task"
- >
- <PlusCircle className="w-8 h-8" /> {/* Assuming PlusCircle is imported */}
- </Button>
-
- <TaskFormDialog isOpen={isTaskFormOpen} onOpenChange={setIsTaskFormOpen} projectId={projectId} />
- </div>
-  );
-
-};
-
-export default ProjectDashboardPage;
+    // Wrap the return content in a fragment or div if needed for layout structure
+    // Or ensure the main div is the root if no other layout elements are needed here

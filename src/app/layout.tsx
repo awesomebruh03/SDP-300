@@ -5,6 +5,7 @@ import './globals.css';
 import 'reactflow/dist/style.css'; // Import ReactFlow styles
 import { AppProvider } from '@/contexts/AppProvider';
 import { Toaster } from "@/components/ui/toaster";
+import { SidebarProvider } from '@/context/SidebarContext'; // Import SidebarProvider
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -30,8 +31,10 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AppProvider>
-          {children}
-          <Toaster />
+          <SidebarProvider> {/* Wrap content with SidebarProvider */}
+ {children}
+            <Toaster />
+          </SidebarProvider>
         </AppProvider>
       </body>
     </html>
