@@ -17,14 +17,6 @@ import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-
-// Define mock users directly in this file for now
-const MOCK_USERS = [
-  { id: 'user-1', name: 'Alice Smith' },
-  { id: 'user-2', name: 'Bob Johnson' },
-  { id: 'user-3', name: 'Charlie Brown' },
-];
-
 interface TaskFormDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
@@ -46,7 +38,6 @@ export function TaskFormDialog({ isOpen, onOpenChange, taskToEdit, projectId, in
   const [status, setStatus] = useState<Task['status']>(initialStatus || 'todo');
   const [assignedProjectId, setAssignedProjectId] = useState<string>(projectId || activeProjectId || '');
   const [timeSpent, setTimeSpent] = useState<number>(0); // in minutes
-  const [assignedUserId, setAssignedUserId] = useState<string | undefined>(undefined); // New state for assigned user
 
   useEffect(() => {
     setAssignedProjectId(projectId || activeProjectId || '');
@@ -57,16 +48,13 @@ export function TaskFormDialog({ isOpen, onOpenChange, taskToEdit, projectId, in
       setPriority(taskToEdit.priority);
       setStatus(taskToEdit.status);
       setAssignedProjectId(taskToEdit.projectId);
-      setAssignedUserId(taskToEdit.assignedUserId); // Load assigned user if editing
       setTimeSpent(taskToEdit.timeSpent || 0);
     } else {
       setTitle('');
       setDescription('');
       setDueDate(undefined);
       setPriority('medium');
-      setStatus(initialStatus || 'todo');
       setTimeSpent(0);
-      setAssignedUserId(undefined); // Reset assigned user
     }
   }, [taskToEdit, isOpen, projectId, activeProjectId, initialStatus]); // Added assignedUserId to dependency array implicitly via taskToEdit
 
@@ -89,7 +77,6 @@ export function TaskFormDialog({ isOpen, onOpenChange, taskToEdit, projectId, in
       status,
       projectId: assignedProjectId,
       timeSpent,
-      assignedUserId, // Include assigned user in task data
     };
     
     try {
@@ -202,26 +189,6 @@ export function TaskFormDialog({ isOpen, onOpenChange, taskToEdit, projectId, in
               </div>
             </div>
 
-            {/* Assigned User */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label htmlFor="assignedUser">Assigned User</Label>
-                <Select value={assignedUserId} onValueChange={(value: string) => setAssignedUserId(value === '' ? undefined : value)}>
-                  <SelectTrigger id="assignedUser">
-                    <SelectValue placeholder="Assign to user (Optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {/* Option to unassign */}
-                    <SelectItem value="">Unassigned</SelectItem>
-                    {/* Mock users */}
-                    {MOCK_USERS.map(user => (
-                      <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            
             {/* Time Spent */}
              <div className="space-y-1">
               <Label htmlFor="timeSpent">Time Spent (minutes)</Label>

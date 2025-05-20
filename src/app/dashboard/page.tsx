@@ -1,7 +1,7 @@
 
 "use client";
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useApp } from '@/hooks/useApp';
 import { Header } from '@/components/layout/Header';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
@@ -9,11 +9,15 @@ import { Loader2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { GraphView } from '@/components/tasks/GraphView';
 import { ListView } from '@/components/tasks/ListView'; 
+import { Task } from '@/lib/types'; // Assuming a Task type definition
 
 export default function DashboardPage() {
-  const { isAuthenticated, currentUser, activeProjectId } = useApp();
+  const { isAuthenticated, currentUser, activeProjectId, getTasksByProjectId } = useApp(); // Destructure getTasksByProjectId
   const router = useRouter();
-  const [loading, setLoading] = useState(true); 
+  const searchParams = useSearchParams();
+  const [loading, setLoading] = useState(true);
+  const [tasks, setTasks] = useState<Task[]>([]); // State to hold tasks
+  const [tasksLoading, setTasksLoading] = useState(false); // State to indicate if tasks are loading
 
   useEffect(() => {
     if (currentUser === undefined) { 
@@ -25,6 +29,17 @@ export default function DashboardPage() {
       setLoading(false); 
     }
   }, [isAuthenticated, currentUser, router]);
+
+  // Fetch tasks when activeProjectId changes
+  useEffect(() => {
+    if (activeProjectId) {
+      // Use getTasksByProjectId from context
+      const projectTasks = getTasksByProjectId(activeProjectId);
+      setTasks(projectTasks);
+    } else {
+      setTasks([]); // Clear tasks when no project is selected
+    }
+  }, [activeProjectId]);
 
   if (loading) { 
     return (
@@ -41,8 +56,6 @@ export default function DashboardPage() {
       </div>
     );
   }
-
-
   return (
     <div className="flex h-screen flex-col">
       <Header />
@@ -57,13 +70,13 @@ export default function DashboardPage() {
           </div>
           
           <TabsContent value="list" className="flex-grow overflow-y-auto">
-             {activeProjectId ? <ListView /> : <NoProjectSelectedMessage />}
+             {activeProjectId ? <ListView tasks={tasks} /> : <NoProjectSelectedMessage />}
           </TabsContent>
           <TabsContent value="kanban" className="flex-grow overflow-hidden">
-            {activeProjectId ? <KanbanBoard /> : <NoProjectSelectedMessage />}
+            {activeProjectId ? <KanbanBoard tasks={tasks} /> : <NoProjectSelectedMessage />}
           </TabsContent>
           <TabsContent value="graph" className="flex-grow"> {/* Adjusted for ReactFlow full space */}
-            {activeProjectId ? <GraphView /> : <NoProjectSelectedMessage />}
+            {activeProjectId ? <GraphView tasks={tasks} /> : <NoProjectSelectedMessage />}
           </TabsContent>
         </Tabs>
       </main>

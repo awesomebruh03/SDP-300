@@ -9,7 +9,7 @@ import { CreateTeamForm } from '@/components/teams/CreateTeamForm'; // Import Cr
 
 interface RightSidebarProps {
 }
-
+type SidebarView = 'list' | 'create';
 
 export function RightSidebar({ children }: RightSidebarProps) {
   const { isOpen, toggleSidebar } = useSidebar(); // Consume the context

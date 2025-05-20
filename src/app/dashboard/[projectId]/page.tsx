@@ -38,7 +38,7 @@ interface ProjectDashboardPageProps {
 
 
 import { PlusCircle } from 'lucide-react'; // Import PlusCircle
-const ProjectDashboardPage: React.FC<ProjectDashboardPageProps> = ({ params }) => {
+export default function ProjectDashboardPage({ params }: ProjectDashboardPageProps) {
   // Access projectId directly from params
   const { projectId } = params;
   // Assuming useApp provides arrays of Project and Task objects
@@ -90,5 +90,35 @@ const ProjectDashboardPage: React.FC<ProjectDashboardPageProps> = ({ params }) =
   console.log('isTaskFormOpen value from hook:', isTaskFormOpen);
 
   return (
-    // Wrap the return content in a fragment or div if needed for layout structure
-    // Or ensure the main div is the root if no other layout elements are needed here
+    <div className="flex h-screen flex-col">
+      {/* Assuming you have a Header component or similar for layout */}
+      {/* <Header /> */} 
+      <main className="flex-grow overflow-hidden bg-background">
+        <Tabs defaultValue="kanban" className="h-full flex flex-col">
+          <div className="p-4 border-b">
+            <TabsList className="grid w-full grid-cols-3 max-w-md mx-auto">
+              <TabsTrigger value="list">List View</TabsTrigger>
+              <TabsTrigger value="kanban">Kanban</TabsTrigger>
+              <TabsTrigger value="graph">Graph View</TabsTrigger>
+            </TabsList>
+          </div>
+          
+          <TabsContent value="list" className="flex-grow overflow-y-auto">
+             <ListView tasks={projectTasks} />
+          </TabsContent>
+          <TabsContent value="kanban" className="flex-grow overflow-hidden">
+            <KanbanBoard
+ tasks={projectTasks}
+ projectId={projectId}
+ />
+          </TabsContent>
+          <TabsContent value="graph" className="flex-grow">
+            <GraphView tasks={projectTasks} />
+          </TabsContent>
+        </Tabs>
+      </main>
+      {/* Assuming you have a TaskFormDialog or similar component here */}
+      {/* {isTaskFormOpen && <TaskFormDialog onClose={closeTaskForm} />} */}
+    </div>
+  );
+};
