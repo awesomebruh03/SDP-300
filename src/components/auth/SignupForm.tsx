@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { app } from '@/app/layout';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { Button } from '../ui/button';
