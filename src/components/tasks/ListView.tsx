@@ -13,14 +13,13 @@ import { TaskFormDialog } from './TaskFormDialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Card } from '@/components/ui/card';
 
-export function ListView({ setIsTaskFormOpen: setParentTaskFormOpen }: { setIsTaskFormOpen: (isOpen: boolean) => void }) {
-  // Use the passed down setIsTaskFormOpen prop
-  const setIsTaskFormOpenState = setParentTaskFormOpen;
+export function ListView() {
   const { 
     activeProjectId, 
     getTasksByProjectId, 
     projects, 
     deleteTask,
+
     getMilestonesByProjectId 
   } = useApp();
   const [taskToEdit, setTaskToEdit] = React.useState<Task | null>(null);
@@ -28,6 +27,7 @@ export function ListView({ setIsTaskFormOpen: setParentTaskFormOpen }: { setIsTa
   // const [isTaskFormOpen, setIsTaskFormOpen] = React.useState(false);
   const [taskToDelete, setTaskToDelete] = React.useState<Task | null>(null);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = React.useState(false);
+  const [isEditTaskFormOpen, setIsEditTaskFormOpen] = React.useState(false); // State for the edit dialog
 
   const activeProject = projects.find(p => p.id === activeProjectId);
 
@@ -58,7 +58,7 @@ export function ListView({ setIsTaskFormOpen: setParentTaskFormOpen }: { setIsTa
 
   const handleEditTask = (task: Task) => {
     setTaskToEdit(task);
-    setIsTaskFormOpenState(true);
+    setIsEditTaskFormOpen(true); // Open the edit dialog
   };
 
   const handleDeleteTask = (task: Task) => {
@@ -153,7 +153,7 @@ export function ListView({ setIsTaskFormOpen: setParentTaskFormOpen }: { setIsTa
         <TaskFormDialog
           // Pass the state from the parent if the parent manages it
           // For the edit dialog within ListView, we manage its state locally
-          isOpen={!!taskToEdit} // Open dialog if taskToEdit is not null
+          isOpen={isEditTaskFormOpen} // Use local state for the edit dialog
           onOpenChange={(isOpen) => {
             setIsTaskFormOpen(isOpen);
             if (!isOpen) setTaskToEdit(null);
