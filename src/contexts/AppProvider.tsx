@@ -1,173 +1,249 @@
-
 "use client";
-import type { User, Project, Task, TaskStatus, ProjectFormData, TaskFormData, Milestone, MilestoneFormData } from '@/lib/types';
-import { LOCAL_STORAGE_USER_KEY, LOCAL_STORAGE_PROJECTS_KEY, LOCAL_STORAGE_TASKS_KEY } from '@/lib/constants';
-// Add this constant for milestones
-const LOCAL_STORAGE_MILESTONES_KEY = "taskTicker_milestones";
 import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { v4 as uuidv4 } from 'uuid'; // Needs: npm install uuid && npm install @types/uuid
+import { getAuth, onAuthStateChanged, User as FirebaseUser, signOut } from 'firebase/auth';
+import { app } from '@/app/layout';
+import { getFirestore, collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, query, where, runTransaction, DocumentSnapshot } from 'firebase/firestore';
+
+// Assuming these types are defined elsewhere and correctly imported
+interface Project {
+  id: string;
+  name: string;
+  isDeleted: boolean;
+  // Add other project properties as needed
+}
+
+interface ProjectFormData {
+  name: string;
+  // Add other form data properties as needed
+}
+
+type TaskStatus = 'todo' | 'in-progress' | 'done'; // Example statuses
+
+interface Task {
+  id: string;
+  projectId: string;
+  name: string;
+  status: TaskStatus;
+  order: number;
+  isDeleted: boolean;
+  // Add other task properties as needed
+}
+
+interface TaskFormData {
+  projectId: string;
+  name: string;
+  status: TaskStatus;
+  // Add other form data properties as needed
+}
+
+interface Milestone {
+  id: string;
+  projectId: string;
+  name: string;
+  order: number;
+  isDeleted: boolean;
+  // Add other milestone properties as needed
+}
+
+interface MilestoneFormData {
+  projectId: string;
+  name: string;
+  // Add other form data properties as needed
+}
 
 export interface AppContextType {
   // Auth
-  currentUser: User | null;
-  login: (email: string) => void; // Simplified login
-  logout: () => void;
+  currentUser: FirebaseUser | null;
   isAuthenticated: boolean;
-
   // Projects
   projects: Project[];
   activeProjectId: string | null;
   setActiveProjectId: (projectId: string | null) => void;
-  addProject: (projectData: ProjectFormData) => Project;
-  updateProject: (projectId: string, projectData: Partial<ProjectFormData>) => Project | undefined;
-  deleteProject: (projectId: string) => void; // Soft delete
+  addProject: (projectData: ProjectFormData) => Promise<string>; // Changed return to Promise<string>
+  updateProject: (projectId: string, projectData: Partial<ProjectFormData>) => Promise<Project | undefined>; // Changed return to Promise
+  deleteProject: (projectId: string) => void;
+  logout: () => void;
   getProjectById: (projectId: string) => Project | undefined;
 
   // Tasks
   tasks: Task[];
   getTasksByProjectId: (projectId: string | null) => Task[];
   getTasksByProjectIdAndStatus: (projectId: string | null, status: TaskStatus) => Task[];
-  addTask: (taskData: TaskFormData) => Task;
-  updateTask: (taskId: string, taskData: Partial<TaskFormData & { status?: TaskStatus, order?: number }>) => Task | undefined;
-  deleteTask: (taskId: string) => void; // Soft delete
+  addTask: (taskData: TaskFormData) => Promise<string>; // Changed return to Promise<string>
+  updateTask: (taskId: string, taskData: Partial<TaskFormData & { status?: TaskStatus, order?: number }>) => Promise<Task | undefined>; // Changed return to Promise
+  deleteTask: (taskId: string) => void;
   getTaskById: (taskId: string) => Task | undefined;
-  moveTask: (taskId: string, newStatus: TaskStatus, newOrder: number, targetProjectId?: string) => void;
-  
+  moveTask: (taskId: string, newStatus: TaskStatus, newOrder: number, targetProjectId?: string) => Promise<void>; // Changed return to Promise<void>
+
   // Milestones
   milestones: Milestone[];
   getMilestonesByProjectId: (projectId: string) => Milestone[];
   getMilestoneById: (milestoneId: string) => Milestone | undefined;
-  addMilestone: (milestoneData: MilestoneFormData) => Milestone;
-  updateMilestone: (milestoneId: string, milestoneData: Partial<MilestoneFormData>) => Milestone | undefined;
-  deleteMilestone: (milestoneId: string) => void;
+  addMilestone: (milestoneData: MilestoneFormData) => Promise<Milestone>; // Changed return to Promise<Milestone>
+  updateMilestone: (milestoneId: string, milestoneData: Partial<MilestoneFormData>) => Promise<Milestone | undefined>; // Changed return to Promise
+  deleteMilestone: (milestoneId: string) => Promise<void>; // Changed return to Promise<void>
 }
+
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Helper function to get item from localStorage
-const getFromLocalStorage = <T,>(key: string, defaultValue: T): T => {
-  if (typeof window === 'undefined') return defaultValue;
-  const item = window.localStorage.getItem(key);
-  return item ? JSON.parse(item) : defaultValue;
-};
-
-// Helper function to set item in localStorage
-const setToLocalStorage = <T,>(key: string, value: T): void => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(key, JSON.stringify(value));
-};
-
-
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [activeProjectId, setActiveProjectIdState] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  useEffect(() => {
-    setCurrentUser(getFromLocalStorage<User | null>(LOCAL_STORAGE_USER_KEY, null));
-    const storedProjects = getFromLocalStorage<Project[]>(LOCAL_STORAGE_PROJECTS_KEY, []);
-    setProjects(storedProjects);
-    const storedTasks = getFromLocalStorage<Task[]>(LOCAL_STORAGE_TASKS_KEY, []);
-    setTasks(storedTasks);
-    const storedMilestones = getFromLocalStorage<Milestone[]>(LOCAL_STORAGE_MILESTONES_KEY, []);
-    setMilestones(storedMilestones);
-
-    if (storedProjects.length > 0 && !activeProjectId) {
-      setActiveProjectIdState(storedProjects.find(p => !p.isDeleted)?.id || null);
-    } else if (storedProjects.length === 0) {
-      setActiveProjectIdState(null);
-    }
-    setIsLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    setToLocalStorage(LOCAL_STORAGE_USER_KEY, currentUser);
-  }, [currentUser, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    setToLocalStorage(LOCAL_STORAGE_PROJECTS_KEY, projects);
-     if (projects.length > 0 && (!activeProjectId || !projects.find(p => p.id === activeProjectId && !p.isDeleted))) {
-      setActiveProjectIdState(projects.find(p => !p.isDeleted)?.id || null);
-    } else if (projects.filter(p => !p.isDeleted).length === 0) {
-      setActiveProjectIdState(null);
-    }
-  }, [projects, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    setToLocalStorage(LOCAL_STORAGE_TASKS_KEY, tasks);
-  }, [tasks, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    setToLocalStorage(LOCAL_STORAGE_MILESTONES_KEY, milestones);
-  }, [milestones, isLoaded]);
-
-  const login = (email: string) => {
-    const user: User = { id: uuidv4(), email };
-    setCurrentUser(user);
+  // Helper to transform Firestore DocumentSnapshot to Project/Task/Milestone type
+  const snapshotToData = <T extends { id: string }>(doc: DocumentSnapshot): T => {
+    return { id: doc.id, ...(doc.data() as Omit<T, 'id'>) };
   };
+
+  // Firebase Auth State Listener and Firestore Data Listeners
+  useEffect(() => {
+    const auth = getAuth(app);
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setIsLoaded(true);
+    });
+
+    if (!isLoaded || !currentUser) {
+      setProjects([]);
+      setTasks([]);
+      setMilestones([]);
+      setActiveProjectIdState(null);
+      return;
+    }
+
+    const db = getFirestore(app);
+    const userUid = currentUser.uid;
+
+    // Projects Listener
+    const projectsCollection = collection(db, `users/${userUid}/projects`);
+    const unsubscribeProjects = onSnapshot(projectsCollection, (snapshot) => {
+      const fetchedProjects: Project[] = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...(doc.data() as Omit<Project, 'id'>)
+      }));
+      setProjects(fetchedProjects);
+      if (fetchedProjects.length > 0 && (!activeProjectId || !fetchedProjects.find(p => p.id === activeProjectId && !p.isDeleted))) {
+        setActiveProjectIdState(fetchedProjects.find(p => !p.isDeleted)?.id || null);
+      } else if (fetchedProjects.filter(p => !p.isDeleted).length === 0) {
+        setActiveProjectIdState(null);
+      }
+    }, (error) => {
+      console.error("Error fetching projects:", error);
+    });
+
+    // Tasks Listener (Conditional on activeProjectId)
+    let unsubscribeTasks: () => void = () => {};
+    if (activeProjectId) {
+      const tasksCollection = collection(db, `users/${userUid}/projects/${activeProjectId}/tasks`);
+      unsubscribeTasks = onSnapshot(tasksCollection, (snapshot) => {
+        const fetchedTasks: Task[] = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...(doc.data() as Omit<Task, 'id'>)
+        }));
+        setTasks(fetchedTasks);
+      }, (error) => {
+        console.error("Error fetching tasks:", error);
+      });
+    } else {
+      setTasks([]); // Clear tasks if no project is active
+    }
+
+    // Milestones Listener
+    const milestonesCollection = collection(db, `users/${userUid}/milestones`);
+    const unsubscribeMilestones = onSnapshot(milestonesCollection, (snapshot) => {
+      const fetchedMilestones: Milestone[] = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...(doc.data() as Omit<Milestone, 'id'>)
+      }));
+      setMilestones(fetchedMilestones);
+    }, (error) => {
+      console.error("Error fetching milestones:", error);
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsubscribeProjects();
+      unsubscribeTasks(); // This will be the no-op function if activeProjectId is null
+      unsubscribeMilestones();
+    };
+
+  }, [currentUser, isLoaded, activeProjectId]);
 
   const logout = () => {
-    setCurrentUser(null);
-    setActiveProjectIdState(null); // Reset active project on logout
+    signOut(getAuth(app)).catch(error => console.error("Error signing out:", error));
+    setActiveProjectIdState(null);
   };
-  
+
   const setActiveProjectId = (projectId: string | null) => {
     setActiveProjectIdState(projectId);
   };
 
-  const addProject = (projectData: ProjectFormData): Project => {
-    if (!currentUser) throw new Error("User not authenticated");
-    const newProject: Project = {
-      ...projectData,
-      id: uuidv4(),
-      ownerId: currentUser.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      isDeleted: false,
-    };
-    setProjects(prev => [...prev, newProject]);
-    if (!activeProjectId) setActiveProjectIdState(newProject.id);
-    return newProject;
-  };
+  const addProject = async (projectData: ProjectFormData): Promise<string> => {
+    if (!currentUser?.uid) throw new Error("User not authenticated");
+    const db = getFirestore(app);
+    const projectsCollection = collection(db, `users/${currentUser.uid}/projects`);
 
-  const updateProject = (projectId: string, projectData: Partial<ProjectFormData>): Project | undefined => {
-    let updatedProject: Project | undefined;
-    setProjects(prev => prev.map(p => {
-      if (p.id === projectId) {
-        updatedProject = { ...p, ...projectData, updatedAt: new Date().toISOString() };
-        return updatedProject;
-      }
-      return p;
-    }));
-    return updatedProject;
-  };
-
-  const deleteProject = (projectId: string) => { // Soft delete
-    updateProject(projectId, { isDeleted: true });
-    // If deleted project was active, set active project to another one or null
-    if (activeProjectId === projectId) {
-      const nextActiveProject = projects.find(p => p.id !== projectId && !p.isDeleted);
-      setActiveProjectIdState(nextActiveProject?.id || null);
+    try {
+      const docRef = await addDoc(projectsCollection, {
+        ...projectData,
+        ownerId: currentUser.uid,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isDeleted: false,
+      });
+      return docRef.id;
+    } catch (error) {
+      console.error("Error adding project:", error);
+      throw error;
     }
-    // Soft delete associated tasks
-    setTasks(prevTasks => 
-      prevTasks.map(task => 
-        task.projectId === projectId ? { ...task, isDeleted: true, updatedAt: new Date().toISOString() } : task
-      )
-    );
   };
-  
+
+  const updateProject = async (projectId: string, projectData: Partial<ProjectFormData>): Promise<Project | undefined> => {
+    if (!currentUser?.uid) {
+      console.error("User not authenticated for updateProject");
+      return undefined;
+    }
+    const db = getFirestore(app);
+    const projectDoc = doc(db, `users/${currentUser.uid}/projects`, projectId);
+
+    const updateData: Partial<Project> = {
+      ...projectData,
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      await updateDoc(projectDoc, updateData);
+      return undefined; // State update is handled by the onSnapshot listener
+    } catch (error) {
+      console.error("Error updating project:", error);
+      return undefined;
+    }
+  };
+
+  const deleteProject = async (projectId: string) => {
+    if (!currentUser?.uid) {
+      console.error("User not authenticated for deleteProject");
+      return;
+    }
+    const db = getFirestore(app);
+    const projectDoc = doc(db, `users/${currentUser.uid}/projects`, projectId);
+
+    try {
+      await updateDoc(projectDoc, { isDeleted: true, updatedAt: new Date().toISOString() });
+    } catch (error) {
+      console.error("Error deleting project:", error);
+    }
+  };
+
   const getProjectById = (projectId: string) => projects.find(p => p.id === projectId && !p.isDeleted);
 
   const getTasksByProjectId = useCallback((projectId: string | null) => {
-    if (!projectId) return tasks.filter(task => !task.isDeleted && !projects.find(p => p.id === task.projectId)?.isDeleted); // Tasks with no project or orphaned
+    if (!projectId) return tasks.filter(task => !task.isDeleted && !projects.find(p => p.id === task.projectId)?.isDeleted);
     return tasks.filter(task => task.projectId === projectId && !task.isDeleted && !projects.find(p => p.id === task.projectId)?.isDeleted);
   }, [tasks, projects]);
 
@@ -177,146 +253,278 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       .sort((a, b) => a.order - b.order);
   }, [getTasksByProjectId]);
 
-  const addTask = (taskData: TaskFormData): Task => {
+  const addTask = async (taskData: TaskFormData): Promise<string> => {
+    if (!currentUser?.uid) throw new Error("User not authenticated");
+    const db = getFirestore(app);
+    const tasksCollection = collection(db, `users/${currentUser.uid}/projects/${taskData.projectId}/tasks`);
+
     const tasksInStatus = getTasksByProjectIdAndStatus(taskData.projectId, taskData.status);
     const newOrder = tasksInStatus.length > 0 ? Math.max(...tasksInStatus.map(t => t.order)) + 1 : 0;
 
-    const newTask: Task = {
-      ...taskData,
-      id: uuidv4(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      isDeleted: false,
-      order: newOrder,
-    };
-    setTasks(prev => [...prev, newTask]);
-    return newTask;
-  };
-
-  const updateTask = (taskId: string, taskData: Partial<TaskFormData & { status?: TaskStatus, order?: number }>): Task | undefined => {
-    let updatedTask: Task | undefined;
-    setTasks(prev => prev.map(t => {
-      if (t.id === taskId) {
-        updatedTask = { ...t, ...taskData, updatedAt: new Date().toISOString() };
-        return updatedTask;
+    try {
+      // Prepare task data, handling potential undefined values like dueDate
+      const taskDataToSend: any = { // Use 'any' for now to allow dynamic property removal
+        ...taskData,
+      };
+      if (taskDataToSend.dueDate === undefined) {
+        delete taskDataToSend.dueDate; // Or set to null if the field should exist but be empty
       }
-      return t;
-    }));
-    return updatedTask;
+
+      const docRef = await addDoc(tasksCollection, {
+        ...taskDataToSend,
+        ownerId: currentUser.uid,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isDeleted: false,
+        order: newOrder,
+      });
+    } catch (error) {
+      console.error("Error adding task:", error);
+      throw error;
+    }
   };
 
-  const deleteTask = (taskId: string) => { // Soft delete
-    updateTask(taskId, { isDeleted: true });
+  const updateTask = async (taskId: string, taskData: Partial<TaskFormData & { status?: TaskStatus, order?: number }>): Promise<Task | undefined> => {
+    if (!currentUser?.uid) {
+      console.error("User not authenticated for updateTask");
+      return undefined;
+    }
+    const db = getFirestore(app);
+    const taskToUpdate = tasks.find(t => t.id === taskId);
+    if (!taskToUpdate) return undefined;
+
+    const taskDoc = doc(db, `users/${currentUser.uid}/projects/${taskToUpdate.projectId}/tasks`, taskId);
+
+    const updateData: Partial<Task> = {
+      ...taskData,
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      await updateDoc(taskDoc, updateData);
+      return undefined;
+    } catch (error) {
+      console.error("Error updating task:", error);
+      return undefined;
+    }
+  };
+
+  const deleteTask = async (taskId: string) => {
+    if (!currentUser?.uid) {
+      console.error("User not authenticated for deleteTask");
+      return;
+    }
+    const db = getFirestore(app);
+    const taskToDelete = tasks.find(t => t.id === taskId);
+    if (!taskToDelete) return;
+
+    try {
+      const taskDoc = doc(db, `users/${currentUser.uid}/projects/${taskToDelete.projectId}/tasks`, taskId);
+      await updateDoc(taskDoc, { isDeleted: true, updatedAt: new Date().toISOString() });
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
   };
 
   const getTaskById = (taskId: string) => tasks.find(t => t.id === taskId && !t.isDeleted);
 
-  // Milestone CRUD operations
-  const getMilestonesByProjectId = (projectId: string) => 
+  const getMilestonesByProjectId = (projectId: string) =>
     milestones.filter(m => m.projectId === projectId && !m.isDeleted).sort((a, b) => a.order - b.order);
 
-  const getMilestoneById = (milestoneId: string) => 
+  const getMilestoneById = (milestoneId: string) =>
     milestones.find(m => m.id === milestoneId && !m.isDeleted);
 
-  const addMilestone = (milestoneData: MilestoneFormData): Milestone => {
+  const addMilestone = async (milestoneData: MilestoneFormData): Promise<Milestone> => {
+    if (!currentUser?.uid) throw new Error("User not authenticated for addMilestone");
+    const db = getFirestore(app);
+    const milestonesCollection = collection(db, `users/${currentUser.uid}/milestones`);
+
     const projectMilestones = getMilestonesByProjectId(milestoneData.projectId);
     const order = projectMilestones.length > 0 ? Math.max(...projectMilestones.map(m => m.order)) + 1 : 0;
-    const newMilestone: Milestone = {
+
+    let newMilestoneId: string | undefined;
+    try {
+      const docRef = await addDoc(milestonesCollection, {
+        ...milestoneData,
+        ownerId: currentUser.uid,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isDeleted: false,
+        order: order,
+      });
+      newMilestoneId = docRef.id;
+    } catch (error) {
+      console.error("Error adding milestone:", error);
+      throw error;
+    }
+    // Note: The returned milestone will have a temporary object structure until onSnapshot updates state.
+    return { id: newMilestoneId!, ...milestoneData, ownerId: currentUser.uid, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), isDeleted: false, order: order };
+  };
+
+  const updateMilestone = async (milestoneId: string, milestoneData: Partial<MilestoneFormData>): Promise<Milestone | undefined> => {
+    if (!currentUser?.uid) {
+      console.error("User not authenticated for updateMilestone");
+      return undefined;
+    }
+    const db = getFirestore(app);
+    const milestoneDoc = doc(db, `users/${currentUser.uid}/milestones`, milestoneId);
+
+    const updateData: Partial<Milestone> = {
       ...milestoneData,
-      id: uuidv4(),
-      order,
-      createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      isDeleted: false,
     };
-    setMilestones(prev => [...prev, newMilestone]);
-    return newMilestone;
+
+    try {
+      await updateDoc(milestoneDoc, updateData);
+      return undefined;
+    } catch (error) {
+      console.error("Error updating milestone:", error);
+      return undefined;
+    }
   };
 
-  const updateMilestone = (milestoneId: string, milestoneData: Partial<MilestoneFormData>): Milestone | undefined => {
-    let updatedMilestone: Milestone | undefined;
-    setMilestones(prev => prev.map(m => {
-      if (m.id === milestoneId) {
-        updatedMilestone = { ...m, ...milestoneData, updatedAt: new Date().toISOString() };
-        return updatedMilestone;
-      }
-      return m;
-    }));
-    return updatedMilestone;
+  const deleteMilestone = async (milestoneId: string): Promise<void> => {
+    if (!currentUser?.uid) {
+      console.error("User not authenticated for deleteMilestone");
+      return;
+    }
+    const db = getFirestore(app);
+    const milestoneDoc = doc(db, `users/${currentUser.uid}/milestones`, milestoneId);
+
+    try {
+      await updateDoc(milestoneDoc, { isDeleted: true, updatedAt: new Date().toISOString() }); // Soft delete
+    } catch (error) {
+      console.error("Error deleting milestone:", error);
+    }
   };
 
-  const deleteMilestone = (milestoneId: string): void => {
-    setMilestones(prev => prev.map(m => 
-      m.id === milestoneId ? { ...m, isDeleted: true, updatedAt: new Date().toISOString() } : m
-    ));
-  };
+  const moveTask = async (taskId: string, newStatus: TaskStatus, newOrder: number, targetProjectId?: string) => {
+    if (!currentUser?.uid) {
+      console.error("User not authenticated for moveTask");
+      return;
+    }
+    const db = getFirestore(app);
+    const userUid = currentUser.uid; // Get user UID once
 
-  const moveTask = (taskId: string, newStatus: TaskStatus, newOrder: number, targetProjectId?: string) => {
-    setTasks(prevTasks => {
-      const taskToMove = prevTasks.find(t => t.id === taskId);
-      if (!taskToMove) return prevTasks;
 
-      const oldProjectId = taskToMove.projectId;
-      const oldStatus = taskToMove.status;
-      const finalProjectId = targetProjectId || oldProjectId;
+    // Find the task in the current local state to get its current projectId
+    const taskToMove = tasks.find(t => t.id === taskId);
+    if (!taskToMove) {
+      console.error("Task not found for moveTask:", taskId);
+      return;
+    }
 
-      // Adjust orders in old column
-      const remainingInOldColumn = prevTasks
-        .filter(t => t.id !== taskId && t.projectId === oldProjectId && t.status === oldStatus)
-        .sort((a, b) => a.order - b.order)
-        .map((t, index) => ({ ...t, order: index }));
+    const oldProjectId = taskToMove.projectId;
+    const oldStatus = taskToMove.status;
+    const finalProjectId = targetProjectId || oldProjectId; // Use targetProjectId if provided, otherwise stay in old project
 
-      // Adjust orders in new column (excluding the moved task for now)
-      const tasksInNewColumn = prevTasks
-        .filter(t => t.id !== taskId && t.projectId === finalProjectId && t.status === newStatus)
-        .sort((a, b) => a.order - b.order);
-      
-      const updatedNewColumnTasks = [];
-      let orderIndex = 0;
-      for (let i = 0; i < tasksInNewColumn.length; i++) {
-        if (orderIndex === newOrder) {
-          orderIndex++; // Make space for the moved task
+    // If the task is not actually moving project or status, and order is already correct, do nothing
+    if (oldProjectId === finalProjectId && oldStatus === newStatus && taskToMove.order === newOrder) {
+      return;
+    }
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        // 1. Get the task document
+        // We need to get the task first to know its original projectId to construct the doc ref
+        const taskDoc = await transaction.get(doc(db, `users/${userUid}/projects/${oldProjectId}/tasks`, taskId));
+
+        if (!taskDoc.exists()) {
+          throw new Error("Task does not exist!");
         }
-        updatedNewColumnTasks.push({ ...tasksInNewColumn[i], order: orderIndex++ });
-      }
-       // If newOrder is at the end
-      if (orderIndex === newOrder && tasksInNewColumn.length === newOrder) {
-         // orderIndex is already incremented if newOrder was amongst existing items
-      }
+
+        // 2. Query tasks in the OLD column (before move)
+        const oldColumnTasksCollection = collection(db, `users/${userUid}/projects/${oldProjectId}/tasks`);
+        const oldColumnQuery = query(
+          oldColumnTasksCollection,
+          where('status', '==', oldStatus),
+          where('isDeleted', '==', false)
+        );
+        const oldColumnSnapshot = await transaction.get(oldColumnQuery);
+        const tasksInOldColumn: Task[] = oldColumnSnapshot.docs
+          .map(doc => snapshotToData<Task>(doc))
+          .filter(t => t.id !== taskId); // Exclude the task being moved
+
+        // 3. Query tasks in the NEW column (after move)
+        const newColumnTasksCollection = collection(db, `users/${userUid}/projects/${finalProjectId}/tasks`);
+        const newColumnQuery = query(
+          newColumnTasksCollection,
+          where('status', '==', newStatus),
+          where('isDeleted', '==', false)
+        );
+        const newColumnSnapshot = await transaction.get(newColumnQuery);
+        const tasksInNewColumn: Task[] = newColumnSnapshot.docs
+          .map(doc => snapshotToData<Task>(doc))
+          .filter(t => t.id !== taskId || (t.id === taskId && oldProjectId !== finalProjectId)); // If moving projects, ensure the original task is excluded from the *new* project's list if it was already there (shouldn't happen for a move)
 
 
-      const movedTask = { 
-        ...taskToMove, 
-        status: newStatus, 
-        order: newOrder, 
-        projectId: finalProjectId, 
-        updatedAt: new Date().toISOString() 
-      };
+        // Adjust orders in the OLD column if the task is moving out or just changing status within the same project
+        if (oldProjectId !== finalProjectId || oldStatus !== newStatus) {
+            tasksInOldColumn
+                .sort((a, b) => a.order - b.order)
+                .forEach((t, index) => {
+                    const docRef = doc(db, `users/${userUid}/projects/${oldProjectId}/tasks`, t.id);
+                    transaction.update(docRef, { order: index });
+                });
+        }
 
-      return prevTasks
-        .filter(t => t.id !== taskId) // Remove moved task
-        .map(t => { // Apply order updates
-          const updatedOld = remainingInOldColumn.find(uot => uot.id === t.id);
-          if (updatedOld) return updatedOld;
-          const updatedNew = updatedNewColumnTasks.find(unt => unt.id === t.id);
-          if (updatedNew) return updatedNew;
-          return t;
-        })
-        .concat(movedTask); // Add moved task back
-    });
+
+        // Adjust orders in the NEW column
+        const allTasksInNewColumnIncludingMoved = [...tasksInNewColumn];
+        // Add the moved task's potential new position and properties for accurate re-ordering calculation
+        allTasksInNewColumnIncludingMoved.splice(newOrder, 0, { ...taskToMove, status: newStatus, projectId: finalProjectId, order: newOrder });
+
+        allTasksInNewColumnIncludingMoved
+            .sort((a, b) => a.order - b.order) // Initial sort to prepare for re-ordering
+            .forEach((t, index) => {
+                const docRef = doc(db, `users/${userUid}/projects/${finalProjectId}/tasks`, t.id); // Ensure correct project path
+                // Only update if the order needs changing to avoid unnecessary writes
+                if (t.order !== index) {
+                     transaction.update(docRef, { order: index });
+                }
+            });
+
+
+        // Update the moved task's properties
+        // If the task is moving to a different project, its document reference must change
+        if (oldProjectId !== finalProjectId) {
+            // Create a new document in the new project's tasks collection
+            transaction.set(doc(db, `users/${userUid}/projects/${finalProjectId}/tasks`, taskId), {
+                ...taskToMove, // All original task data
+                status: newStatus,
+                order: newOrder,
+                projectId: finalProjectId,
+                updatedAt: new Date().toISOString(),
+            });
+        } else {
+            // If staying in the same project, just update the existing document
+            // Need to re-get the doc ref as it's within the transaction scope
+             const taskInSameProjectRef = doc(db, `users/${userUid}/projects/${oldProjectId}/tasks`, taskId);
+
+
+            transaction.update(taskInSameProjectRef, {
+                status: newStatus,
+                order: newOrder,
+                projectId: finalProjectId, // This might be redundant if projectId is the same, but good for clarity
+                updatedAt: new Date().toISOString(),
+            });
+        }
+      });
+    } catch (error) {
+      console.error("Error moving task:", error);
+      throw error; // Re-throw for caller to handle
+    }
   };
-
 
   const isAuthenticated = !!currentUser;
 
   if (!isLoaded) {
-     // You might want to render a loading spinner here or null
     return null;
   }
 
   return (
     <AppContext.Provider value={{
-      currentUser, login, logout, isAuthenticated,
+      currentUser, isAuthenticated, logout,
       projects, activeProjectId, setActiveProjectId, addProject, updateProject, deleteProject, getProjectById,
       tasks, getTasksByProjectId, getTasksByProjectIdAndStatus, addTask, updateTask, deleteTask, getTaskById, moveTask,
       milestones, getMilestonesByProjectId, getMilestoneById, addMilestone, updateMilestone, deleteMilestone

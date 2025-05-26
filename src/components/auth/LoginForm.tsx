@@ -1,6 +1,7 @@
 
 "use client";
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useApp } from '@/hooks/useApp';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -9,15 +10,17 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast'; // Corrected import path
 import { Mail, Lock } from 'lucide-react';
+import { app } from '@/app/layout'; // Import the app instance
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'; // Import Firebase auth functions
 
 export function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState(''); // Password for UI, not actually used for auth logic
-  const { login } = useApp();
+  const { } = useApp();
   const router = useRouter();
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
       toast({
@@ -36,13 +39,19 @@ export function LoginForm() {
         });
         return;
     }
-
-    login(email); // Simplified login, no password check
-    toast({
-      title: "Login Successful",
-      description: `Welcome back, ${email}!`,
-    });
-    router.push('/dashboard');
+ // Use Firebase Authentication for login
+    const auth = getAuth(app);
+    signInWithEmailAndPassword(auth, email, password)
+      .then((userCredential) => {
+        // Signed in
+        const user = userCredential.user;
+        console.log('User logged in:', user);
+        // The AppProvider's onAuthStateChanged listener will handle setting the currentUser state
+        router.push('/dashboard'); // Redirect to dashboard
+      })
+      .catch((error) => {
+        toast({ title: 'Login Error', description: error.message, variant: 'destructive' });
+      });
   };
 
   return (
@@ -90,6 +99,12 @@ export function LoginForm() {
             Login
           </Button>
         </form>
+        <div className="mt-6 text-center text-sm">
+          Don't have an account?{' '}
+          <Link href="/signup" className="underline">
+            Sign Up
+          </Link>
+        </div>
       </CardContent>
     </Card>
   );
