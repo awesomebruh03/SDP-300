@@ -11,13 +11,12 @@ import { PlusCircle } from 'lucide-react'; // Import PlusCircle icon
 
 
 interface KanbanBoardProps {
-  tasks: Task[]; // Accept tasks as a prop
   setIsTaskFormOpen: (isOpen: boolean) => void; // Accept setIsTaskFormOpen prop
   projectId: string; // Accept projectId prop
 }
 
-export function KanbanBoard({ tasks, setIsTaskFormOpen, projectId }: KanbanBoardProps) { // Destructure props
-  const { moveTask, getTasksByProjectIdAndStatus, activeProjectId } = useApp(); // Keep getTasksByProjectIdAndStatus if needed elsewhere in KanbanBoard logic
+export function KanbanBoard({ setIsTaskFormOpen, projectId }: KanbanBoardProps) { // Destructure props
+  const { tasks, moveTask, activeProjectId } = useApp(); // get tasks and moveTask from useApp
 
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, taskId: string) => {
@@ -71,7 +70,7 @@ export function KanbanBoard({ tasks, setIsTaskFormOpen, projectId }: KanbanBoard
             <KanbanColumn
               key={status}
               status={status}
-              // Filter tasks prop by status for each column
+              // Filter the tasks prop by status and sort by order for each column
               tasks={tasks.filter(task => task.status === status).sort((a, b) => a.order - b.order)}
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}

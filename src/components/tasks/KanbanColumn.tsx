@@ -15,6 +15,7 @@ interface KanbanColumnProps {
 }
 
 export function KanbanColumn({ status, tasks, onDragStart, onDragOver, onDrop }: KanbanColumnProps) {
+  console.log("KanbanColumn tasks prop (", status, "):", tasks);
   const statusColors: Record<TaskStatus, string> = {
     todo: 'border-t-sky-500',
     'in-progress': 'border-t-amber-500',

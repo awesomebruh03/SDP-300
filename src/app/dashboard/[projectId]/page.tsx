@@ -62,16 +62,6 @@ export default function ProjectDashboardPage({ params }: ProjectDashboardPagePro
     notFound();
   }
 
-  // Filter tasks based on projectId
-  const projectTasks = useMemo(() => {
-    // Ensure tasks is an array and task objects have a 'projectId' property
-     if (!Array.isArray(tasks)) {
-        console.error("Tasks is not an array in useApp context");
-        return [];
-    }
-    return tasks.filter(task => task.projectId === projectId);
-  }, [tasks, projectId]);
-
   // Set the active project ID in the context when the component mounts
   useEffect(() => {
     setActiveProjectId(projectId);
@@ -81,6 +71,9 @@ export default function ProjectDashboardPage({ params }: ProjectDashboardPagePro
     // return () => setActiveProjectId(null);
   }, [projectId, setActiveProjectId]); // Added setActiveProjectId to dependency array
 
+  // Effect to trigger re-render when tasks change
+  useEffect(() => {}, [tasks]);
+
   // You might want to add loading states if fetching data is asynchronous
   // For now, assuming data is immediately available from context after initial load
 
@@ -88,6 +81,7 @@ export default function ProjectDashboardPage({ params }: ProjectDashboardPagePro
   console.log('isTaskFormOpen:', isTaskFormOpen);
   // Add console.log immediately after getting the value from the hook
   console.log('isTaskFormOpen value from hook:', isTaskFormOpen);
+  console.log("page.tsx tasks from useApp:", tasks);
 
   return (
     <div className="flex h-screen flex-col">
@@ -104,16 +98,16 @@ export default function ProjectDashboardPage({ params }: ProjectDashboardPagePro
           </div>
           
           <TabsContent value="list" className="flex-grow overflow-y-auto">
-             <ListView tasks={projectTasks} />
+             <ListView tasks={tasks} />
           </TabsContent>
           <TabsContent value="kanban" className="flex-grow overflow-hidden">
             <KanbanBoard
- tasks={projectTasks}
+ tasks={tasks}
  projectId={projectId}
  />
           </TabsContent>
           <TabsContent value="graph" className="flex-grow">
-            <GraphView tasks={projectTasks} />
+            <GraphView tasks={tasks} />
           </TabsContent>
         </Tabs>
       </main>

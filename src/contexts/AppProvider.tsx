@@ -406,46 +406,67 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const db = getFirestore(app);
     const userUid = currentUser.uid; // Get user UID once
 
-
-    // Find the task in the current local state to get its current projectId
-    const taskToMove = tasks.find(t => t.id === taskId);
-    if (!taskToMove) {
-      console.error("Task not found for moveTask:", taskId);
-      return;
+    let initialOldProjectId: string | undefined;
+    // Use the local state to get a potential initial projectId, but rely on transaction read for final check
+    const taskFromLocalState = tasks.find(t => t.id === taskId);
+    if (taskFromLocalState) {
+        initialOldProjectId = taskFromLocalState.projectId;
+    } else {
+        console.error("Task not found in local state for moveTask:", taskId);
+         // We'll attempt to read within the transaction, but might need a project ID hint.
+         // If targetProjectId is provided, we might assume it's coming from that project.
+         // If not, this transaction might fail without a projectId hint.
+         if (!targetProjectId) throw new Error("Cannot move task: Task not found locally and no target project provided.");
     }
 
-    const oldProjectId = taskToMove.projectId;
-    const oldStatus = taskToMove.status;
-    const finalProjectId = targetProjectId || oldProjectId; // Use targetProjectId if provided, otherwise stay in old project
+     const finalProjectId = targetProjectId || initialOldProjectId!; // Use targetProjectId if provided, otherwise rely on initialOldProjectId
 
-    // If the task is not actually moving project or status, and order is already correct, do nothing
-    if (oldProjectId === finalProjectId && oldStatus === newStatus && taskToMove.order === newOrder) {
-      return;
-    }
+    // We'll perform the move in transaction, even if status/order seem the same,
+    // to ensure order integrity in the column. The transaction handles atomicity.
 
     try {
       await runTransaction(db, async (transaction) => {
-        // 1. Get the task document
-        // We need to get the task first to know its original projectId to construct the doc ref
-        const taskDoc = await transaction.get(doc(db, `users/${userUid}/projects/${oldProjectId}/tasks`, taskId));
+        // 1. Get the task document within the transaction
+        // We need a potential project ID to start the read. Use the initialOldProjectId or targetProjectId if available.
+        const projectIdHint = initialOldProjectId || targetProjectId;
+        if (!projectIdHint) throw new Error("Cannot get task document: No project ID hint available.");
+
+        const taskDocRef = doc(db, `users/${userUid}/projects/${projectIdHint}/tasks`, taskId);
+        const taskDoc = await transaction.get(taskDocRef);
 
         if (!taskDoc.exists()) {
-          throw new Error("Task does not exist!");
+          // If it doesn't exist in the hinted project, it might have been moved or deleted.
+          // Try searching across all projects if necessary, but for now, throw error.
+           throw new Error("Task does not exist or is not in the expected project!");
         }
 
-        // 2. Query tasks in the OLD column (before move)
+        const taskToMove = snapshotToData<Task>(taskDoc);
+        const oldProjectId = taskToMove.projectId; // Get the authoritative oldProjectId from the document
+        const oldStatus = taskToMove.status; // Get the authoritative oldStatus from the document
+
+        if (!oldProjectId) {
+          // This should ideally not happen if the task document was fetched successfully, but as a safeguard:
+          throw new Error(`Task with ID ${taskId} found in transaction but has no projectId.`);
+        }
+
+         // If the task is not actually moving project or status, and order is already correct, we can potentially stop here
+         // However, re-ordering the source column is always needed if the task leaves it.
+         // Let's proceed with re-ordering both columns for simplicity and robustness.
+
+        // 2. Query tasks in the OLD column (before move) - use the authoritative oldProjectId and oldStatus
         const oldColumnTasksCollection = collection(db, `users/${userUid}/projects/${oldProjectId}/tasks`);
         const oldColumnQuery = query(
           oldColumnTasksCollection,
           where('status', '==', oldStatus),
           where('isDeleted', '==', false)
         );
+        console.log('oldColumnQuery:', oldColumnQuery);
         const oldColumnSnapshot = await transaction.get(oldColumnQuery);
         const tasksInOldColumn: Task[] = oldColumnSnapshot.docs
           .map(doc => snapshotToData<Task>(doc))
           .filter(t => t.id !== taskId); // Exclude the task being moved
 
-        // 3. Query tasks in the NEW column (after move)
+        // 3. Query tasks in the NEW column (after move) - use the finalProjectId and newStatus
         const newColumnTasksCollection = collection(db, `users/${userUid}/projects/${finalProjectId}/tasks`);
         const newColumnQuery = query(
           newColumnTasksCollection,
@@ -455,7 +476,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const newColumnSnapshot = await transaction.get(newColumnQuery);
         const tasksInNewColumn: Task[] = newColumnSnapshot.docs
           .map(doc => snapshotToData<Task>(doc))
-          .filter(t => t.id !== taskId || (t.id === taskId && oldProjectId !== finalProjectId)); // If moving projects, ensure the original task is excluded from the *new* project's list if it was already there (shouldn't happen for a move)
+          .filter(t => t.id !== taskId); // Always exclude the task being moved from the list before inserting it
 
 
         // Adjust orders in the OLD column if the task is moving out or just changing status within the same project
@@ -472,12 +493,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // Adjust orders in the NEW column
         const allTasksInNewColumnIncludingMoved = [...tasksInNewColumn];
         // Add the moved task's potential new position and properties for accurate re-ordering calculation
+        // Ensure we use the updated status, project ID, and new order for the moved task in this calculation
         allTasksInNewColumnIncludingMoved.splice(newOrder, 0, { ...taskToMove, status: newStatus, projectId: finalProjectId, order: newOrder });
 
         allTasksInNewColumnIncludingMoved
             .sort((a, b) => a.order - b.order) // Initial sort to prepare for re-ordering
             .forEach((t, index) => {
-                const docRef = doc(db, `users/${userUid}/projects/${finalProjectId}/tasks`, t.id); // Ensure correct project path
+                const docRef = doc(db, `users/${userUid}/projects/${t.projectId}/tasks`, t.id); // Ensure correct project path based on the task's final location
                 // Only update if the order needs changing to avoid unnecessary writes
                 if (t.order !== index) {
                      transaction.update(docRef, { order: index });
@@ -485,16 +507,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             });
 
 
-        // Update the moved task's properties
+        // Update the moved task's properties or move the document
         // If the task is moving to a different project, its document reference must change
         if (oldProjectId !== finalProjectId) {
-            // Create a new document in the new project's tasks collection
-            transaction.set(doc(db, `users/${userUid}/projects/${finalProjectId}/tasks`, taskId), {
+            // To move a document in Firestore within a transaction, you read it, delete the old one, and set a new one.
+            // Read was already done at step 1.
+
+            // Delete the old document
+            const oldTaskDocRef = doc(db, `users/${userUid}/projects/${oldProjectId}/tasks`, taskId);
+            transaction.delete(oldTaskDocRef);
+
+            // Create a new document in the new project's tasks collection with the same ID
+            const newTaskDocRef = doc(db, `users/${userUid}/projects/${finalProjectId}/tasks`, taskId);
+            transaction.set(newTaskDocRef, {
                 ...taskToMove, // All original task data
                 status: newStatus,
                 order: newOrder,
                 projectId: finalProjectId,
                 updatedAt: new Date().toISOString(),
+                 // Ensure ownerId is carried over if it exists
+                 ...(taskToMove.ownerId && { ownerId: taskToMove.ownerId })
             });
         } else {
             // If staying in the same project, just update the existing document
@@ -533,3 +565,4 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     </AppContext.Provider>
   );
 };
+      
