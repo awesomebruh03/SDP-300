@@ -38,15 +38,12 @@ export function LoginForm() {
             variant: "destructive",
         });
         return;
-    }
- // Use Firebase Authentication for login
-    const auth = getAuth(app);
-    signInWithEmailAndPassword(auth, email, password)
-      .then((userCredential) => {
+    } // Use Firebase Authentication for login
+    signInWithEmailAndPassword(getAuth(app), email, password)
+      .then(() => {
         // Signed in
-        const user = userCredential.user;
-        console.log('User logged in:', user);
         // The AppProvider's onAuthStateChanged listener will handle setting the currentUser state
+        toast({ title: 'Login Successful', description: 'You are now logged in.' });
         router.push('/dashboard'); // Redirect to dashboard
       })
       .catch((error) => {

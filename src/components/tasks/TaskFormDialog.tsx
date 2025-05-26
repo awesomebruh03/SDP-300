@@ -79,12 +79,20 @@ export function TaskFormDialog({ isOpen, onOpenChange, taskToEdit, projectId, in
       timeSpent,
     };
     
+    // Filter out undefined values before sending to Firebase
+    const filteredTaskData: Partial<TaskFormData> = {};
+    (Object.keys(taskData) as Array<keyof TaskFormData>).forEach(key => {
+      if (taskData[key] !== undefined) {
+        filteredTaskData[key] = taskData[key];
+      }
+    });
+
     try {
       if (taskToEdit) {
-        updateTask(taskToEdit.id, taskData);
+        updateTask(taskToEdit.id, filteredTaskData);
         toast({ title: "Task Updated", description: `Task "${title}" has been updated.` });
       } else {
-        addTask(taskData);
+        addTask(filteredTaskData as TaskFormData); // Cast back to TaskFormData if needed, or adjust addTask signature
         toast({ title: "Task Created", description: `Task "${title}" has been created.` });
       }
       onOpenChange(false); // Close dialog

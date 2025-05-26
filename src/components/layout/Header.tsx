@@ -11,8 +11,10 @@ import { PlusCircle, LogOut, UserCircle, FolderPlus } from 'lucide-react';
 
 export function Header() {
   const { currentUser, logout, isAuthenticated, activeProjectId } = useApp();
-  const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
+  const [isProjectFormOpen, setIsProjectFormOpen] = useState(false); // Keep this line
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
+
+  const handleTaskFormOpenChange = React.useCallback((isOpen: boolean) => setIsTaskFormOpen(isOpen), [setIsTaskFormOpen]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -37,7 +39,7 @@ export function Header() {
                 </Button>
                 <TaskFormDialog 
                   isOpen={isTaskFormOpen} 
-                  onOpenChange={setIsTaskFormOpen} 
+                  onOpenChange={handleTaskFormOpenChange}
                   projectId={activeProjectId} 
                 />
               </>

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Edit3, Trash2, Plus } from 'lucide-react';
 import { TaskFormDialog } from './TaskFormDialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Card } from '@/components/ui/card';
 
 export function ListView({ setIsTaskFormOpen: setParentTaskFormOpen }: { setIsTaskFormOpen: (isOpen: boolean) => void }) {
   // Use the passed down setIsTaskFormOpen prop
@@ -170,23 +171,6 @@ export function ListView({ setIsTaskFormOpen: setParentTaskFormOpen }: { setIsTa
           description={`Are you sure you want to delete the task "${taskToDelete.title}"? This action cannot be undone locally.`}
         />
       )}
-
-      {/* Floating Action Button */}
-      <Button
-        variant="default"
-        size="lg"
-        className="fixed bottom-8 right-8 rounded-full shadow-lg z-50 w-16 h-16 p-0 text-3xl flex items-center justify-center"
-        title="Create Task"
-        onClick={() => setIsTaskFormOpenState(true)} // Use the prop to open the parent's dialog
-      />
     </div>
   );
 }
-
-// Temporary Card component placeholder if not globally available or specific styling is needed.
-// If Card from ui/card is already used, this can be removed.
-const Card: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, children, ...props }) => (
-  <div className={`bg-card text-card-foreground border rounded-lg p-0 ${className}`} {...props}>
-    {children}
-  </div>
-);

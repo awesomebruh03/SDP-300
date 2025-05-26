@@ -262,12 +262,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const newOrder = tasksInStatus.length > 0 ? Math.max(...tasksInStatus.map(t => t.order)) + 1 : 0;
 
     try {
+
       // Prepare task data, handling potential undefined values like dueDate
-      const taskDataToSend: any = { // Use 'any' for now to allow dynamic property removal
-        ...taskData,
-      };
-      if (taskDataToSend.dueDate === undefined) {
-        delete taskDataToSend.dueDate; // Or set to null if the field should exist but be empty
+      const taskDataToSend: any = {};
+      for (const key in taskData) {
+        if (taskData[key as keyof TaskFormData] !== undefined) {
+          taskDataToSend[key] = taskData[key as keyof TaskFormData];
+        }
       }
 
       const docRef = await addDoc(tasksCollection, {
